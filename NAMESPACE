@@ -1,0 +1,8 @@
+export(CalibrateSSB,CrossStrata,WideFromCalibrate,LinCombMatrix,LagDiff,Period,
+PeriodDiff,PanelEstimation,AkuData)
+importFrom(survey,svydesign,calibrate)
+importFrom("stats", "aggregate", "as.formula", "binomial", "glm", "lm",
+              "lm.influence", "model.frame", "model.matrix", "predict",
+              "resid", "update", "weights")
+importFrom("utils", "data")
+
