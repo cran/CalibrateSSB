@@ -1,3 +1,86 @@
+#' Variance estimation for panel data
+#'
+#' Variance estimation of linear combinations of totals and ratios based on
+#' output from wideFromCalibrate
+#'
+#' When denominator=NULL, only estimates for a single y-variable (numerator)
+#' are calculated. When denominator is specified, estimates for numerator,
+#' denominator and ratio are calculated. The default estimation type parameter,
+#' "robustModel", is equation (12) in paper. "ssbAKU" is (16), "robustModelww"
+#' is (9) and "robustModelGroup" and "robustModelGroupww" are cluster robust
+#' variants based on \eqn{(w-1)^2} and \eqn{w^2} .
+#'
+#' @param x Output from wideFromCalibrate.
+#' @param numerator y variable name or number.
+#' @param denominator y variable name or number.
+#' @param linComb Matrix defining linear combinations of waves.
+#' @param linComb0 Linear combination matrix to be used prior to ratio
+#' calculations.
+#' @param estType Estimation type: "robustModel" (default), "ssbAKU",
+#' "robustModelww", "robustModelGroup" or "robustModelGroupww" (see below)
+#' @param leveragePower Power used when adjusting residuals using leverages.
+#' @param group Extra variable name or number for cluster robust estimation.
+#' @param returnCov Return covariance matrices instead of variance vectors.
+#' @param usewGross Use wGross (if avaliable) instead of design weights to
+#' adjust covariance matrix in the case of NA popTotals
+#' @return \item{wTot}{Sum of weights} \item{estimates}{Ordinary estimates}
+#' \item{linCombs}{Estimates of linear combinations}
+#' \item{varEstimates}{Variance of estimates} \item{varLinCombs}{Variance of
+#' estimates of linear combinations} When denominator is specified the above
+#' output refer to ratios. Then, similar output for numerator and denominator
+#' are also included.
+#' 
+#' @seealso \code{\link{CalibrateSSB}}, \code{\link{CalSSBobj}}, \code{\link{WideFromCalibrate}}, \code{\link{CalibrateSSBpanel}}. 
+#' 
+#' @examples
+#'
+#' # Generates data  - two years
+#' z    = AkuData(3000)  # 3000 in each quarter
+#' zPop = AkuData(10000)[,1:7]
+#'
+#' # Calibration and "WideFromCalibrate"
+#' b = CalibrateSSB(z,calmodel="~ sex*age", partition=c("year","q"),
+#'         popData=zPop, y=c("unemployed","workforce"))
+#' bWide = WideFromCalibrate(b,CrossStrata(z[,c("year","q")]),z$id)
+#'
+#' # Define linear combination matrix
+#' lc = rbind(LagDiff(8,4),PeriodDiff(8,4))
+#' rownames(lc) = c("diffQ1","diffQ2","diffQ3","diffQ4","diffYearMean")
+#' colnames(lc) = colnames(head(bWide$y[[1]]))
+#' lc
+#'
+#' # Unemployed: Totals and linear combinations
+#' d1=PanelEstimation(bWide,"unemployed",linComb=lc)  #
+#'
+#' # Table of output
+#' cbind(tot=d1$estimates,se=sqrt(d1$varEstimates))
+#' cbind(tot=d1$linCombs,se=sqrt(d1$varLinCombs))
+#'
+#' # Ratio: Totals and linear combinations
+#' d=PanelEstimation(bWide,numerator="unemployed",denominator="workforce",linComb=lc)
+#' cbind(tot=d$estimates,se=sqrt(d$varEstimates))
+#' cbind(tot=d$linCombs,se=sqrt(d$varLinCombs))
+#'
+#' \dontrun{
+#' # Calibration when som population totals unknown (edu)
+#' # Leverages in output (will be used to adjust residuals)
+#' # Cluster robust estimation (families/famid)
+#' b2 = CalibrateSSB(z,popData=zPop,calmodel="~ edu*sex + sex*age",
+#'            partition=c("year","q"), y=c("unemployed","workforce"),
+#'            leverageOutput=TRUE)
+#' b2Wide = WideFromCalibrate(b2,CrossStrata(z[,c("year","q")]),z$id,extra=z$famid)
+#' d2 = PanelEstimation(b2Wide,"unemployed",linComb=lc,group=1,estType = "robustModelGroup")
+#' cbind(tot=d2$linCombs,se=sqrt(d2$varLinCombs))
+#' }
+#'
+#'
+#' # Yearly mean before ratio calculation (linComb0)
+#' # and difference between years (linComb)
+#' g=PanelEstimation(bWide,numerator="unemployed",denominator="workforce",
+#'     linComb= LagDiff(2),linComb0=Period(8,4))
+#' cbind(tot=g$linCombs,se=sqrt(g$varLinCombs))
+#'
+#' @export PanelEstimation
 PanelEstimation = function(x,numerator,denominator=NULL,linComb=matrix(0,0,n),linComb0=NULL,
                       estType="robustModel",leveragePower=1/2,group=NULL,returnCov=FALSE,usewGross=TRUE){
   if(class(x$w)=="NULL"){
@@ -258,31 +341,52 @@ MyDiag = function(n,k=0){
   z
 }
 
-LagDiff= function(n,lag=1,removerows=TRUE){
-  m=MyDiag(n,lag) - diag(n)
-  if(removerows) m = m[rowSums(m)==0 & rowSums(abs(m))==2 , ,drop=FALSE]
-  m
-}
 
-Period = function(n,period=1,k=0,takeMean=TRUE,removerows=TRUE,overlap=FALSE){
-  x =matrix(0,n,n)
-  for(i in seq_(1,period) ) x = x+MyDiag(n,k+i-1)
-  if(removerows) x = x[rowSums(x)==period, ,drop=FALSE]
-  if(!overlap)   x = x[((-1+1:dim(x)[1])%%period)==0, ,drop=FALSE]
-  if(takeMean)   x = x/period
-  x
-}
 
-PeriodDiff = function(n,period=1,lag=period,k=0,takeMean=TRUE,removerows=TRUE,overlap=FALSE){
-  a = Period(n=n,period=period,k=k,takeMean=FALSE,removerows=FALSE,overlap=TRUE)
-  b = Period(n=n,period=period,k=k+lag,takeMean=FALSE,removerows=FALSE,overlap=TRUE)
-  x = b-a
-  if(removerows) x = x[rowSums(x)==0 & rowSums(abs(x))==2*period , ,drop=FALSE]
-  if(!overlap)   x = x[((-1+1:dim(x)[1])%%period)==0, ,drop=FALSE]
-  if(takeMean)   x = x/period
-  x
-}
 
+
+#' Creation of linear combination matrices
+#'
+#' Create matrices for changes (LagDiff), means (Period) and mean changes
+#' (PeriodDiff).
+#'
+#'
+#' @aliases LinCombMatrix PeriodDiff Period LagDiff
+#' @param n Number of variables
+#' @param period Number of variables involved in each period
+#' @param lag Lag used for difference calculation
+#' @param k Shift the start of each period
+#' @param takeMean Calculate mean over each period (sum when FALSE)
+#' @param removerows Revove incomplete rows
+#' @param overlap Overlap between periods (moving averages)
+#' @return Linear combination matrix
+#' @note It can be useful to add row names to the resulting matrix before
+#' further use.
+#' @examples
+#'
+#' # We assume two years of four quarters (n=8)
+#'
+#' # Quarter to quarter differences
+#' LagDiff(8)
+#'
+#' # Changes from same quarter last year
+#' LagDiff(8,4)
+#'
+#' # Yearly averages
+#' Period(8,4)
+#'
+#' # Moving yearly averages
+#' Period(8,4,overlap=TRUE)
+#'
+#' # Difference between yearly averages
+#' PeriodDiff(8,4) # Also try n=16 with overlap=TRUE/FALSE
+#'
+#' # Combine two variants and add row names
+#' lc = rbind(LagDiff(8,4),PeriodDiff(8,4))
+#' rownames(lc) = c("diffQ1","diffQ2","diffQ3","diffQ4","diffYearMean")
+#' lc
+#'
+#' @export LinCombMatrix
 LinCombMatrix = function(n,period=NULL,lag=NULL,k=0,takeMean=TRUE,removerows=TRUE,overlap=FALSE){
   if(is.null(period)){
     if(is.null(lag)) x = diag(n)
@@ -293,6 +397,48 @@ LinCombMatrix = function(n,period=NULL,lag=NULL,k=0,takeMean=TRUE,removerows=TRU
   }
   x
 }
+
+
+
+#' @rdname LinCombMatrix
+#' @encoding UTF8
+#' @export
+#'
+LagDiff= function(n,lag=1,removerows=TRUE){
+  m=MyDiag(n,lag) - diag(n)
+  if(removerows) m = m[rowSums(m)==0 & rowSums(abs(m))==2 , ,drop=FALSE]
+  m
+}
+
+#' @rdname LinCombMatrix
+#' @encoding UTF8
+#' @export
+#'
+Period = function(n,period=1,k=0,takeMean=TRUE,removerows=TRUE,overlap=FALSE){
+  x =matrix(0,n,n)
+  for(i in seq_(1,period) ) x = x+MyDiag(n,k+i-1)
+  if(removerows) x = x[rowSums(x)==period, ,drop=FALSE]
+  if(!overlap)   x = x[((-1+1:dim(x)[1])%%period)==0, ,drop=FALSE]
+  if(takeMean)   x = x/period
+  x
+}
+
+#' @rdname LinCombMatrix
+#' @encoding UTF8
+#' @export
+#'
+PeriodDiff = function(n,period=1,lag=period,k=0,takeMean=TRUE,removerows=TRUE,overlap=FALSE){
+  a = Period(n=n,period=period,k=k,takeMean=FALSE,removerows=FALSE,overlap=TRUE)
+  b = Period(n=n,period=period,k=k+lag,takeMean=FALSE,removerows=FALSE,overlap=TRUE)
+  x = b-a
+  if(removerows) x = x[rowSums(x)==0 & rowSums(abs(x))==2*period , ,drop=FALSE]
+  if(!overlap)   x = x[((-1+1:dim(x)[1])%%period)==0, ,drop=FALSE]
+  if(takeMean)   x = x/period
+  x
+}
+
+
+
 
 
 

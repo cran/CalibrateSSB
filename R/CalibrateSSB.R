@@ -1,13 +1,143 @@
+#   wregw i impvekt bør endres ...bereging av "*" mellom matrise og vektor
+#   Kan se ut til at det blir riktig p.g.a beregningsrekkefølge, men det bør endres ....
+#
 
+
+
+#' Calibration weighting and estimation
+#' 
+#' Compute weights by calibration and corresponding estimates, totals and
+#' residuals
+#' 
+#' When popTotals as input is NULL, population totals are computed from popData
+#' (when available) or from grossSample. Some elements of popTotals may be
+#' missing (not allowed when using ReGenesees). When using "ReGenesees", both
+#' weiging and estimation are done by that package. When using "survey", only
+#' calibration weiging are done by that package.
+#' The parameters \code{wave}, \code{id} and \code{extra} have no effect on the 
+#' computations, but result in extra elements in output 
+#' (to be used by WideFromCalibrate() later).  
+#' 
+#' 
+#' @encoding UTF8
+#' 
+#' @param grossSample Data frame.
+#' @param calmodel Formula defining the linear structure of the calibration
+#' model.
+#' @param response Variable name of response indicator (net sample when 1).
+#' @param popTotals Population totals (similar to population totals as output).
+#' @param y Names of variables of interest. Can be a list similar to "by"
+#' below.
+#' @param by Names of the variables that define the "estimation domains". If
+#' NULL (the default option) or NA estimates refer to the whole population. Use
+#' list for multiple specifications (resulting in list as output).
+#' @param partition Names of the variables that define the "calibration
+#' domains" for the model. NULL (the default) implies no calibration domains.
+#' @param lRegmodel Formula defining the linear structure of a logistic
+#' regression model.
+#' @param popData Data frame of population data.
+#' @param samplingWeights Name of the variable with initial weights for the
+#' sampling units.
+#' @param usePackage Specifying the package to be used: "survey" (the default),
+#' "ReGenesees" or "none".
+#' @param bounds Bounds for the calibration weights. When ReGenesees: Allowed
+#' range for the ratios between calibrated and initial weights. The default is
+#' c(-Inf,Inf).
+#' @param calfun The distance function for the calibration process; the default
+#' is 'linear'.
+#' @param onlyTotals When TRUE: Only population totals are returned.
+#' @param onlyw When TRUE: Only the calibrated weights are returned.
+#' @param uselRegWeights When TRUE: Weighted logistic regression is performed
+#' as a first calibration step.
+#' @param ids Name of sampling unit identifier variable.
+#' @param residOutput Residuals in output when TRUE. FALSE is default.
+#' @param leverageOutput Leverages in output when TRUE. FALSE is default.
+#' @param yOutput y in output when TRUE. FALSE is default.
+#' @param samplingWeightsOutput samplingWeights in output when TRUE. FALSE is
+#' default.
+#' @param dropResid2 When TRUE (default) and when no missing population totals
+#' - only one set of residuals in output.
+#' @param wGrossOutput wGross in output when TRUE (default) and when NA
+#' popTotals.
+#' @param wave Time or another repeat variable (to be included in output).
+#' @param id Identifier variable (to be included in output).
+#' @param extra Variables for the extra dataset (to be included in output).
+#' @param allowNApopTotals When TRUE missing population totals are allowed.
+#' Results in error when FALSE and warning when NULL.
+#' @param partitionPrint When TRUE partition progress is printed. 
+#' Automatic decision when NULL (about 1 min total computing time).  
+#' 
+#' @param ... Further arguments sent to underlying functions.
+#' @return Unless onlyTotals or onlyw is TRUE, the output is an object of class calSSB. That is, a list with 
+#' elements: \item{popTotals}{Population totals.} \item{w}{The calibrated
+#' weights.} \item{wGross}{Calibrated gross sample weights when NA popTotals.}
+#' \item{estTM}{Estimates (with standard error).} \item{resids}{Residuals,
+#' reduced model when NA popTotals.} \item{resids2}{Residuals, full model.}
+#' \item{leverages}{Diagonal elements of hat-matrix, reduced model when NA
+#' popTotals.} \item{leverages2}{Diagonal elements of hat-matrix, full model.}
+#' \item{y}{as input} \item{samplingWeights}{as input}
+#' \item{wave}{as input or via CrossStrata}
+#' \item{id}{as input}
+#' \item{extra}{as input}
+#' 
+#' @export
+#' @importFrom methods formalArgs
+#' @importFrom stats aggregate as.formula binomial glm lm lm.influence model.frame model.matrix predict resid update weights
+#' @importFrom utils head tail capture.output
+#' @importFrom survey svydesign calibrate
+#' 
+#' @seealso \code{\link{CalSSBobj}}, \code{\link{WideFromCalibrate}},  \code{\link{PanelEstimation}}, \code{\link{CalibrateSSBpanel}}.
+#' 
+#' @examples
+#' 
+#' # Generates data  - two years
+#' z    <- AkuData(3000)  # 3000 in each quarter
+#' zPop <- AkuData(10000)[,1:7]
+#' 
+#' # Calibration using "survey"
+#' a <- CalibrateSSB(z, calmodel = "~ sex*age",
+#'                  partition = c("year","q"),  # calibrate within quarter
+#'                  popData = zPop, y = c("unemployed","workforce"),
+#'                  by = c("year","q")) # Estimate within quarter
+#' head(a$w) # calibrated weights
+#' a$estTM   # estimates
+#' a$popTotals   # popTotals used as input below
+#' 
+#' 
+#' # Calibration, no package, popTotals as input
+#' b <- CalibrateSSB(z, popTotals=a$popTotals, calmodel="~ sex*age",
+#'       partition = c("year","q"), usePackage = "none", y = c("unemployed","workforce"))
+#' max(abs(a$w-b$w)) # Same weights as above
+#' 
+#' print(a)
+#' print(b)
+#' 
+#' 
 CalibrateSSB = function(grossSample,calmodel=NULL,response="R",popTotals=NULL,y=NULL,by = NULL,partition=NULL,lRegmodel=NULL,
                         popData=NULL,samplingWeights=NULL,
                         usePackage="survey",bounds=c(-Inf,Inf),calfun="linear",
                         onlyTotals=FALSE,onlyw=FALSE,uselRegWeights=FALSE,ids=NULL,
-                        residOutput = (usePackage!="ReGenesees"),leverageOutput = FALSE,yOutput = (usePackage!="ReGenesees"),
+                        residOutput = TRUE,
+                        leverageOutput = FALSE,
+                        yOutput = TRUE,
                         samplingWeightsOutput = FALSE,
                         dropResid2 = TRUE,
                         wGrossOutput = TRUE,
+                        wave=NULL,
+                        id=NULL,
+                        extra=NULL,
+                        allowNApopTotals = NULL,
+                        partitionPrint = NULL,
                         ...){
+  #if(hasArg("residOutput"))
+  #  warning("residOutput is an old argument not in use")
+  timeLimit = 60
+  if(!is.null(allowNApopTotals)){
+    checkAnyNApopTotals = !allowNApopTotals
+  } else{
+    checkAnyNApopTotals = TRUE
+  }
+    
   if(leverageOutput) residOutput = TRUE
   if(is.null(y)) residOutput = FALSE
   if(residOutput & is.list(y)) stop("residOutput & is.list(y) NOT IMPLEMENTED")
@@ -32,31 +162,37 @@ CalibrateSSB = function(grossSample,calmodel=NULL,response="R",popTotals=NULL,y=
   if(tolower(usePackage)=="regenesees"){
     if(!is.null(lRegmodel))
       stop("lRegmodel when ReGenesees NOT IMPLEMENTED")
-    if(residOutput)
-      stop("residOutput when ReGenesees NOT IMPLEMENTED")
-    if(yOutput)
-      stop("yOutput when ReGenesees NOT IMPLEMENTED")
-    if(samplingWeightsOutput)
-      stop("samplingWeightsOutput when ReGenesees NOT IMPLEMENTED")
+    #if(residOutput)
+    #  stop("residOutput when ReGenesees NOT IMPLEMENTED")
+    #if(yOutput)
+    #  stop("yOutput when ReGenesees NOT IMPLEMENTED")
+    #if(samplingWeightsOutput)
+    #  stop("samplingWeightsOutput when ReGenesees NOT IMPLEMENTED")
     if(is.null(ids)){
       ids = "ids5652503017"
       grossSample[,ids] = 1:n
     }
 
-    outPutReGenesees =CalibratePackageReGenesees(netSample=grossSample[R==1,],calmodel=calmodel,popTotals=popTotals,y=y,
+    retur =CalibratePackageReGenesees(netSample=grossSample[R==1,],calmodel=calmodel,popTotals=popTotals,y=y,
                                           by=by,partition=partition,
                                           popData=popData,samplingWeights=samplingWeights,bounds=bounds,calfun=calfun,
                                           onlyTotals=onlyTotals,ids=ids,...)
-    w = outPutReGenesees$w
-    outPutReGenesees$w = rep(0,n)
-    outPutReGenesees$w[R==1] = w
-    if(onlyw) return(outPutReGenesees$w)
-    resids = outPutReGenesees$resids
-    outPutReGenesees$resids = matrix(NaN,n,dim(resids)[2])
-    outPutReGenesees$resids[R==1,] = resids
-    return(outPutReGenesees)
-  }
-  ######## END ReGenesees
+    w = retur$w
+    retur$w = rep(0,n)
+    retur$w[R==1] = w
+    if(onlyw) return(retur$w)
+    resids = retur$resids
+    retur$resids = matrix(NaN,n,dim(resids)[2])
+    retur$resids[R==1,] = resids
+    #return(retur)
+    if(yOutput) retur$y = grossSample[,y,drop=FALSE]
+    if(samplingWeightsOutput) retur$samplingWeights = samplingWeights
+    
+    #if(!residOutput | !yOutput)
+    #  return(retur)
+    #return(structure(retur, class = "calSSB", n=n, nY=length(y)))
+  }######## END ReGenesees
+  else {
 
 
   bigStrataLevels=NULL
@@ -110,9 +246,28 @@ CalibrateSSB = function(grossSample,calmodel=NULL,response="R",popTotals=NULL,y=
       etos = etos_e1_e2_by_lm
     }
   }
+  
+  if(is.null(partitionPrint))
+    pPrint = TRUE
+  else
+    pPrint = partitionPrint
+  
+  if(nBig<=1)
+    pPrint = FALSE
+  
+  if(pPrint)
+    printi = capture.output(print(bigStrataLevels,row.names=FALSE))
 
+  
   for(i in 1:nBig)
   {
+    if(i==1 & pPrint){
+      if(is.null(partitionPrint)){
+        timeStart = Sys.time()
+      } else {
+        cat(printi[1],"\n")
+      }
+    }
     rows    = bigStrata  ==i
     lm_model = lm(c(calModel,as.formula(paste(response,"~1")))[[1]],data=grossSample[rows,])   # ~1 when calModel=NULL
 
@@ -136,6 +291,15 @@ CalibrateSSB = function(grossSample,calmodel=NULL,response="R",popTotals=NULL,y=
     popTotals = rbind(popTotals,popTotals_)
 
 
+    if(checkAnyNApopTotals){
+      if(anyNA(popTotals[dim(popTotals)[1],])){
+        if(!is.null(allowNApopTotals))
+          stop("Missing population totals not allowed according to parameter allowNApopTotals.")
+        else
+          warning("Special methodology since missing population totals (warning according to parameter allowNApopTotals)")
+        checkAnyNApopTotals = FALSE
+      }
+    }
 
     if(!onlyTotals & !(tolower(usePackage)=="nocalibration")){
       a = calibrateSSB(grossSample[rows,],calModel, popTotals[dim(popTotals)[1],],response=NULL,lRegModel,
@@ -160,6 +324,16 @@ CalibrateSSB = function(grossSample,calmodel=NULL,response="R",popTotals=NULL,y=
         h2[rowsNetto]=e1_e2$h2
       }
     }
+    
+    if(i==1 & pPrint & is.null(partitionPrint)){
+      if(difftime(Sys.time(),timeStart,units = "secs")>timeLimit/nBig)
+        cat(printi[1],"\n")
+      else
+        pPrint = FALSE
+    }
+    if(pPrint)
+      cat(printi[1+i],"\n")
+    
 
   }
   if(wGrossOutput) if(sum(is.finite(wGross))==0) wGross = NULL
@@ -215,7 +389,19 @@ CalibrateSSB = function(grossSample,calmodel=NULL,response="R",popTotals=NULL,y=
   if(yOutput) retur$y = grossSample[,y,drop=FALSE]
   if(samplingWeightsOutput) retur$samplingWeights = samplingWeights
   if(wGrossOutput) retur$wGross = wGross
-  return(retur)
+  } ######## END NOT ReGenesees
+  
+  if(!is.null(wave)){
+    if(length(wave)>1)
+      retur$wave = CrossStrata(grossSample[,wave])
+    else
+      retur$wave = grossSample[,wave]
+  }
+  if(!is.null(id)) retur$id = grossSample[,id]
+  if(!is.null(extra)) retur$extra = grossSample[,extra,drop=FALSE]
+  if(!residOutput | !yOutput)
+    return(retur)
+  return(structure(retur, class = "calSSB", n=n, nY=length(y)))
 }
 
 
@@ -223,6 +409,27 @@ CalibrateSSB = function(grossSample,calmodel=NULL,response="R",popTotals=NULL,y=
 # Create new levels by crossing levels in "by"
 # When returnb=TRUE an overview of original variabels according to new levels are also retuned
 # byExtra contains the same variables as by and represents another data set.
+
+
+#' Crossing several factor variables
+#' 
+#' Create new factor variable by crossing levels in several variables
+#' 
+#' 
+#' @param by Dataframe or matrix with several variables
+#' @param sep Used to create new level names
+#' @param returnb When TRUE an overview of original variabels according to new
+#' levels are also retuned.
+#' @param asNumeric When TRUE the new variable is numeric.
+#' @param byExtra Contains the same variables as by and represents another data
+#' set.
+#' @return \item{a}{The new variable} \item{aExtra}{New variable according to
+#' byExtra} \item{b}{Overview of original variabels according to new levels}
+#' @examples
+#' 
+#' CrossStrata(cbind(factor(rep(1:3,2)),c('A',rep('B',5)) ))
+#' 
+#' @export CrossStrata
 CrossStrata = function(by,sep = "-",returnb=FALSE,asNumeric=FALSE,byExtra=NULL){
   by = as.data.frame(by)
   byList = as.list(by)
@@ -251,8 +458,45 @@ CrossStrata = function(by,sep = "-",returnb=FALSE,asNumeric=FALSE,byExtra=NULL){
 }
 
 
-WideFromCalibrate = function(a,wave,id,subSet=NULL,extra=NULL){    # wave instead of bigStrata, extra is list
-  x=NULL
+
+
+#' Rearrange output from CalibrateSSB (calSSB object). Ready for input to PanelEstimation.
+#' 
+#' One row for each id and one column for each wave.
+#' 
+#' When wave, id or extra is NULL, corresponding elements in the input object (\code{a}) will be used if available,
+#' 
+#' 
+#' @param a A calSSB object. That is, output from CalibrateSSB() or CalSSBobj().
+#' @param wave Time or another repeat variable.
+#' @param id Identifier variable.
+#' @param subSet Grouping variable for splitting ouput.
+#' @param extra Dataset with extra variables not in \code{a}.
+#' @return Output has the same elements (+ extra) as input (a), but rearranged.
+#' When subSet is input otput is alist according to the subSet levels.
+#' 
+#' @export
+#' 
+#' @seealso \code{\link{CalibrateSSB}}, \code{\link{CalSSBobj}}, \code{\link{PanelEstimation}}.
+#' 
+#' 
+#' @examples
+#' 
+#' # See examples in PanelEstimation and CalSSBobj
+#' 
+WideFromCalibrate = function(a,wave=NULL,id=NULL,subSet=NULL,extra=NULL){    # wave instead of bigStrata, extra is list
+  if(class(a) != "calSSB")
+    stop("a must be an object of class calSSB")
+  if(is.null(wave))
+    wave = a$wave
+  if(is.null(wave))
+    stop("wave neeed")
+  if(is.null(id))
+    id = a$id
+  if(is.null(id))
+    stop("id neeed")
+  x=structure(list(),class = "calSSBwide")
+  
   if(!is.null(a$y))          x$y          = wideDataMatrix(a$y,wave,id,asList=TRUE)
   if(!is.null(a$w))          x$w          = wideDataMatrix(a$w,wave,id,asList=FALSE)
   if(!is.null(a$resids))     x$resids     = wideDataMatrix(a$resids,wave,id,asList=TRUE)
@@ -262,10 +506,13 @@ WideFromCalibrate = function(a,wave,id,subSet=NULL,extra=NULL){    # wave instea
   if(!is.null(a$samplingWeights)) x$samplingWeights = wideDataMatrix(a$samplingWeights,wave,id,asList=FALSE)
   if(!is.null(a$wGross))     x$wGross = wideDataMatrix(a$wGross,wave,id,asList=FALSE)
   if(!is.null(extra))        x$extra = wideDataMatrix(extra,wave,id,asList=TRUE)
+  else
+    if(!is.null(a$extra))      x$extra = wideDataMatrix(a$extra,wave,id,asList=TRUE)
   if(is.null(subSet)) return(x)
   s123 = make123(subSet)
   s = wideDataMatrix(s123,wave,id,asList=FALSE)
   k = vector("list",max(s123))
+  k = structure(k,class = "calSSBwideList") # Ny her
   names(k) = levels(s123)
   for(i in 1:max(s123)){
     si = s==i
@@ -399,13 +646,13 @@ sum_ = function(x) sum(x,na.rm=TRUE)
 
 asFormula = function(s) {
   if(is.null(s)) return(NULL)
-  if(is.na(s)[1]) return(NULL)
   if(class(s)=="formula") return(s)
+  if(is.na(s)[1]) return(NULL)
   as.formula(paste("~",paste(s,collapse="+"),sep=""))
 }
 
 
-CalibratePackageReGenesees = function(netSample,calmodel=NULL,popTotals=NULL,y=NULL,by = NULL,partition=NULL,
+CalibratePackageReGeneseesCRANversion = function(netSample,calmodel=NULL,popTotals=NULL,y=NULL,by = NULL,partition=NULL,
                           popData=NULL,samplingWeights=NULL,bounds=c(-Inf,Inf),calfun="linear",
                           onlyTotals=FALSE,ids,...){
   stop("Use of ReGenesees is not implemented in this version since ReGenesees is not on CRAN.")
