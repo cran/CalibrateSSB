@@ -125,7 +125,7 @@ CalSSBobj <- function(x=NULL,y=NULL,w=NULL,wGross=NULL,resids=NULL,resids2=NULL,
       #return(CalSSBobjReGenesees(x,
       #  y=y,samplingWeights=samplingWeights,extra=extra,id=id,wave=wave))
     }
-    if(class(x) != "calSSB")
+    if(class(x)[1] != "calSSB")
       stop("x must be an object of class calSSB")
     n = attr(x,"n")
     nY = attr(x,"nY")
