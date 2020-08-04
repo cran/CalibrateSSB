@@ -4,10 +4,20 @@
 \alias{CalSSBobj}
 \title{Create or modify a CalSSB object}
 \usage{
-CalSSBobj(x = NULL, y = NULL, w = NULL, wGross = NULL,
-  resids = NULL, resids2 = NULL, leverages = NULL,
-  leverages2 = NULL, samplingWeights = NULL, extra = NULL,
-  id = NULL, wave = NULL)
+CalSSBobj(
+  x = NULL,
+  y = NULL,
+  w = NULL,
+  wGross = NULL,
+  resids = NULL,
+  resids2 = NULL,
+  leverages = NULL,
+  leverages2 = NULL,
+  samplingWeights = NULL,
+  extra = NULL,
+  id = NULL,
+  wave = NULL
+)
 }
 \arguments{
 \item{x}{NULL or an  existing calSSB object}
@@ -40,6 +50,9 @@ A CalSSB object. That is, an object of the type retuned by \code{\link{Calibrate
 \description{
 The elements of the CalSSB object are taken directly from the input parameters.
 }
+\note{
+If x is a ReGenesees/cal.analytic object, this function is a wrapper to \code{\link{CalSSBobjReGenesees}}.
+}
 \examples{
 #' # Generates data - two years
 z <- AkuData(3000)  # 3000 in each quarter
@@ -61,5 +74,5 @@ CalSSBobj(y = b$y, w = 10*b$w, resids = b$resids, wave = CrossStrata(z[, c("year
 
 }
 \seealso{
-\code{\link{CalibrateSSB}}, \code{\link{WideFromCalibrate}},  \code{\link{PanelEstimation}}.
+\code{\link{CalibrateSSB}}, \code{\link{CalSSBobjReGenesees}}, \code{\link{WideFromCalibrate}},  \code{\link{PanelEstimation}}.
 }

@@ -5,15 +5,37 @@
 \alias{CalibrateSSB}
 \title{Calibration weighting and estimation}
 \usage{
-CalibrateSSB(grossSample, calmodel = NULL, response = "R",
-  popTotals = NULL, y = NULL, by = NULL, partition = NULL,
-  lRegmodel = NULL, popData = NULL, samplingWeights = NULL,
-  usePackage = "survey", bounds = c(-Inf, Inf), calfun = "linear",
-  onlyTotals = FALSE, onlyw = FALSE, uselRegWeights = FALSE,
-  ids = NULL, residOutput = TRUE, leverageOutput = FALSE,
-  yOutput = TRUE, samplingWeightsOutput = FALSE, dropResid2 = TRUE,
-  wGrossOutput = TRUE, wave = NULL, id = NULL, extra = NULL,
-  allowNApopTotals = NULL, partitionPrint = NULL, ...)
+CalibrateSSB(
+  grossSample,
+  calmodel = NULL,
+  response = "R",
+  popTotals = NULL,
+  y = NULL,
+  by = NULL,
+  partition = NULL,
+  lRegmodel = NULL,
+  popData = NULL,
+  samplingWeights = NULL,
+  usePackage = "survey",
+  bounds = c(-Inf, Inf),
+  calfun = "linear",
+  onlyTotals = FALSE,
+  onlyw = FALSE,
+  uselRegWeights = FALSE,
+  ids = NULL,
+  residOutput = TRUE,
+  leverageOutput = FALSE,
+  yOutput = TRUE,
+  samplingWeightsOutput = FALSE,
+  dropResid2 = TRUE,
+  wGrossOutput = TRUE,
+  wave = NULL,
+  id = NULL,
+  extra = NULL,
+  allowNApopTotals = NULL,
+  partitionPrint = NULL,
+  ...
+)
 }
 \arguments{
 \item{grossSample}{Data frame.}
@@ -142,6 +164,15 @@ max(abs(a$w-b$w)) # Same weights as above
 print(a)
 print(b)
 
+\dontrun{
+require(ReGenesees)
+# Calibration and estimation via ReGenesees
+CalibrateSSB(z, calmodel = "~ sex*age",
+             partition = c("year","q"),  # calibrate within quarter
+             popData = zPop, usePackage = "ReGenesees",
+             y = c("unemployed","workforce"),
+             by = c("year","q")) # Estimate within quarter
+}
 
 }
 \seealso{

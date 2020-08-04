@@ -87,9 +87,11 @@ CheckDim <- function(x,nRow,nCol=1,nam="x",allowNULL=TRUE){
 #'
 #' @return A CalSSB object. That is, an object of the type retuned by \code{\link{CalibrateSSB}}.
 #' 
+#' @note If x is a ReGenesees/cal.analytic object, this function is a wrapper to \code{\link{CalSSBobjReGenesees}}.
+#' 
 #' @export
 #' 
-#' @seealso \code{\link{CalibrateSSB}}, \code{\link{WideFromCalibrate}},  \code{\link{PanelEstimation}}.
+#' @seealso \code{\link{CalibrateSSB}}, \code{\link{CalSSBobjReGenesees}}, \code{\link{WideFromCalibrate}},  \code{\link{PanelEstimation}}.
 #'
 #' @examples
 #' #' # Generates data - two years
@@ -115,15 +117,14 @@ CalSSBobj <- function(x=NULL,y=NULL,w=NULL,wGross=NULL,resids=NULL,resids2=NULL,
                    id=NULL, wave=NULL){
   if(!is.null(x)){
     if(class(x)[1]=="cal.analytic"){
-      stop("Use of ReGenesees is not implemented in this version since ReGenesees is not on CRAN. See github.com/statisticsnorway/CalibrateSSB for another version.")
-      #if(!is.null(w))         warning("Input w ignored when ReGenesees")
-      #if(!is.null(wGross))    warning("Input wGross ignored when ReGenesees")
-      #if(!is.null(resids))    warning("Input resids ignored when ReGenesees")
-      #if(!is.null(resids2))   warning("Input resids2 ignored when ReGenesees")
-      #if(!is.null(leverages)) warning("Input leverages ignored when ReGenesees")
-      #if(!is.null(leverages)) warning("Input leverages2 ignored when ReGenesees")
-      #return(CalSSBobjReGenesees(x,
-      #  y=y,samplingWeights=samplingWeights,extra=extra,id=id,wave=wave))
+      if(!is.null(w))         warning("Input w ignored when ReGenesees")
+      if(!is.null(wGross))    warning("Input wGross ignored when ReGenesees")
+      if(!is.null(resids))    warning("Input resids ignored when ReGenesees")
+      if(!is.null(resids2))   warning("Input resids2 ignored when ReGenesees")
+      if(!is.null(leverages)) warning("Input leverages ignored when ReGenesees")
+      if(!is.null(leverages)) warning("Input leverages2 ignored when ReGenesees")
+      return(CalSSBobjReGenesees(x,
+        y=y,samplingWeights=samplingWeights,extra=extra,id=id,wave=wave))
     }
     if(class(x)[1] != "calSSB")
       stop("x must be an object of class calSSB")
@@ -167,6 +168,106 @@ CalSSBobj <- function(x=NULL,y=NULL,w=NULL,wGross=NULL,resids=NULL,resids2=NULL,
   x
 }
 
+
+#' Create a CalSSB object from a ReGenesees/cal.analytic object 
+#'
+#' @param x Output from ReGenesees::e.calibrate() (object of class cal.analytic)  
+#' @param y formula or variable names 
+#' @param samplingWeights NULL, TRUE (capture from x), formula, variable name or vector of data
+#' @param extra NULL, formula, variable names or matrix of data
+#' @param id NULL, TRUE (ids from x), formula, variable name or vector of data
+#' @param wave NULL,  formula, variable name or vector of data
+#'
+#' @return A CalSSB object. That is, an object of the type retuned by \code{\link{CalibrateSSB}}.
+#' @export
+#' 
+#' @seealso \code{\link{CalibrateSSB}}, \code{\link{CalSSBobj}}, \code{\link{WideFromCalibrate}},  \code{\link{PanelEstimation}}.
+#' 
+#' @examples
+#' \dontrun{
+#' # Generates data - two years
+#' z <- AkuData(3000)  # 3000 in each quarter
+#' zPop <- AkuData(10000)[, 1:7]
+#' z$samplingWeights <- 1
+#' z$ids <- 1:NROW(z)
+#' 
+#' # Create a ReGenesees/cal.analytic object
+#' library("ReGenesees")
+#' desReGenesees <- e.svydesign(z[z$R == 1, ], ids = ~ids, weights = ~samplingWeights)
+#' popTemplate <- pop.template(data = desReGenesees, calmodel = ~sex * age, partition = ~year + q)
+#' popTotals <- fill.template(universe = zPop, template = popTemplate)
+#' calReGenesees <- e.calibrate(design = desReGenesees, df.population = popTotals)
+#' 
+#' # Create CalSSB objects from a ReGenesees/cal.analytic object
+#' CalSSBobjReGenesees(calReGenesees, y = ~unemployed + workforce, id = TRUE, 
+#'                     samplingWeights = TRUE, extra = ~famid)
+#' a <- CalSSBobjReGenesees(calReGenesees, y = c("unemployed", "workforce"), 
+#'                          id = "id", extra = "famid", wave = c("year", "q"))
+#' 
+#' # Use the CalSSB object as input ...
+#' PanelEstimation(WideFromCalibrate(a), "unemployed", linComb = PeriodDiff(8, 4))
+#' 
+#' }
+CalSSBobjReGenesees <- function(x,y, samplingWeights=NULL,extra=NULL,
+                      id=NULL, wave=NULL){
+  if (requireNamespace("ReGenesees", quietly = TRUE)) {
+    get.residuals <- ReGenesees::get.residuals
+  } else {
+    stop("The package ReGenesees, is needed.")
+  }
+  z = NULL
+  z$w <- weights(x)
+  z$resids = get.residuals(x,asFormula(y), scale = "no")
+  z$y = model.frame(asFormula(y), data=x$variables)
+  n = dim(z$y)[1]
+  nY= dim(z$y)[2]
+  
+  if(!is.null(samplingWeights)){
+    if(is.logical(samplingWeights)){
+      if(samplingWeights){
+        wei      <- attr(x, "weights")
+        wei.char <- all.vars(wei)
+        samplingWeights <- substr(wei.char, 0, nchar(wei.char) - 4)
+        } else
+          samplingWeights <- NULL
+        } 
+  }
+  if(!is.null(samplingWeights))
+    if(class(samplingWeights)[1]=="formula" | (is.character(samplingWeights) & length(samplingWeights)==1 ))
+      samplingWeights = model.frame(asFormula(samplingWeights), data=x$variables)[,]
+  z$samplingWeights = samplingWeights
+  
+  if(!is.null(extra))
+    if(class(extra)[1]=="formula" | (is.character(extra) & length(extra)<min(dim(x$variables)) ))
+      extra = model.frame(asFormula(extra), data=x$variables)    
+  z$extra = extra
+    
+  if(!is.null(id))
+    if(is.logical(id)){
+       if(id)
+         id = model.frame(attr(x,"ids"),data=x$variables)[,]
+       else
+         id = NULL
+    }
+  
+  if(!is.null(id))
+    if(class(id)[1]=="formula" | (is.character(id) & length(id)==1))
+      id = model.frame(asFormula(id), data=x$variables)[,]    
+  z$id = id
+  
+  if(!is.null(wave))
+      if(class(wave)[1]=="formula" | (is.character(wave) & length(wave)<min(dim(x$variables)) ))
+        wave = model.frame(asFormula(wave), data=x$variables)[,]
+  if(NCOL(wave)==1)
+    z$wave = wave
+  else
+    z$wave = CrossStrata(wave)
+    
+    
+  n = dim(z$y)[1]
+  nY= dim(z$y)[2]
+  structure(z, class = "calSSB", n=n, nY=nY)
+}
 
 
 
