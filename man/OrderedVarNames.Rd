@@ -9,7 +9,7 @@ OrderedVarNames(x, sep = ":")
 \arguments{
 \item{x}{input}
 
-\item{sep}{}
+\item{sep}{character string used to separate}
 }
 \value{
 output

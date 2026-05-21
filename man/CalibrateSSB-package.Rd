@@ -29,4 +29,22 @@ Official Statistics}, Bucharest, Romania, 7-8 April. \cr
 Särndal, C.-E. and Lundström, S. (2005): \emph{Estimation in Surveys with
 Nonresponse}, John Wiley and Sons, New York.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/statisticsnorway/ssb-calibratessb}
+  \item \url{https://statisticsnorway.github.io/ssb-calibratessb/}
+  \item Report bugs at \url{https://github.com/statisticsnorway/ssb-calibratessb/issues}
+}
+
+}
+\author{
+\strong{Maintainer}: Øyvind Langsrud \email{oyl@ssb.no} (\href{https://orcid.org/0000-0002-1380-4396}{ORCID})
+
+Authors:
+\itemize{
+  \item Øyvind Langsrud \email{oyl@ssb.no} (\href{https://orcid.org/0000-0002-1380-4396}{ORCID})
+}
+
+}
 \keyword{calibration}
